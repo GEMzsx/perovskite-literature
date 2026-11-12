@@ -184,31 +184,10 @@ function mountPerovskiteCatalog(workspace, sourceBadge) {
     title:'文献标题', ...dimensions, doi:'DOI', note:'备注',
     authors:'作者', venue:'出版来源', registry:'元数据来源'
   };
-  const demoPapers = [
-    [2026,'铅基卤化物','界面工程','SAM 与埋底界面'],
-    [2026,'锡基卤化物','稳定性','锡基薄膜的氧化稳定性'],
-    [2026,'铅基卤化物','器件结构','宽带隙顶电池与叠层设计'],
-    [2026,'铅基卤化物','界面工程','钝化层与界面复合'],
-    [2025,'铅基卤化物','成膜工艺','涂布与晶化过程'],
-    [2025,'锡基卤化物','成膜工艺','锡基前驱液与薄膜形貌'],
-    [2025,'双钙钛矿','材料设计','双钙钛矿的带隙调控'],
-    [2025,'铅基卤化物','稳定性','湿热老化与封装'],
-    [2025,'铅基卤化物','界面工程','空穴选择性接触'],
-    [2024,'锡基卤化物','界面工程','锡基器件的界面修饰'],
-    [2024,'双钙钛矿','材料设计','双钙钛矿的组成筛选'],
-    [2024,'铅基卤化物','成膜工艺','溶剂体系与薄膜覆盖'],
-    [2024,'铅基卤化物','稳定性','光照下的器件稳定性'],
-    [2023,'铅基卤化物','器件结构','倒置器件的层叠结构'],
-    [2023,'锡基卤化物','材料设计','锡基钙钛矿组成设计'],
-    [2023,'双钙钛矿','稳定性','双钙钛矿的环境稳定性']
-  ].map(([year, system, topic, title], key) => ({
-    key, year:String(year), system, topic, title:`示例文献 · ${title}`,
-    doi:'', note:'此条为演示记录。', source:'合成演示数据'
-  }));
   const views = {overview:'概览', chart:'交叉图', papers:'文献列表'};
   const pageSize = 15;
   const filters = {year:'', system:'', topic:''};
-  let catalog = demoPapers;
+  let catalog = [];
   let view = 'overview';
   let query = '';
   let onlyMissingDOI = false;
@@ -382,7 +361,7 @@ function mountPerovskiteCatalog(workspace, sourceBadge) {
 
   function refreshSource() {
     if (workspace.hidden) return;
-    sourceBadge.textContent = catalog === demoPapers ? '合成演示数据' : '我的文献 · 当前页面';
+    sourceBadge.textContent = catalog.length ? '我的文献 · 当前页面' : '0 篇文献';
   }
 
   function refreshFilters() {
@@ -488,6 +467,14 @@ function mountPerovskiteCatalog(workspace, sourceBadge) {
     workspace.querySelectorAll('[data-pv-view]').forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.pvView === view));
     });
+    if (!catalog.length) {
+      $('#pv-results').innerHTML = `
+        <section class="panel pv-chart empty">
+          <h2>暂无文献</h2>
+          <p>按 DOI 查文献，或导入文献 CSV 开始。</p>
+        </section>`;
+      return;
+    }
     const papers = matchingPapers();
     const drillLabel = drilldown.map(([key,value]) => `${dimensions[key]}：${value}`).join(' · ');
     $('#pv-results').innerHTML = `
@@ -605,7 +592,7 @@ function mountPerovskiteCatalog(workspace, sourceBadge) {
     if (!event.target.closest('[data-pv-lookup-apply]') || !lookupResult) return;
     try {
       const existing = lookupDestination(lookupResult.doi);
-      if (!existing && catalog !== demoPapers && catalog.length >= 500) {
+      if (!existing && catalog.length >= 500) {
         throw Error('当前列表已有 500 篇文献。可先导出，再导入另一批文献。');
       }
       const classification = {
@@ -618,7 +605,6 @@ function mountPerovskiteCatalog(workspace, sourceBadge) {
         }
         Object.assign(existing, classification);
       } else {
-        if (catalog === demoPapers) catalog = [];
         catalog.push({key:catalog.length, note:'', source:'DOI 检索', ...lookupResult, ...classification});
       }
       lookupDialog.close();
@@ -646,14 +632,14 @@ function mountPerovskiteCatalog(workspace, sourceBadge) {
         <dt>DOI</dt><dd>${paper.doi ? `<a href="${esc(doiLink(paper.doi))}" target="_blank" rel="noopener noreferrer">${esc(paper.doi)}</a>` : '待补'}</dd>
         ${paper.note ? `<dt>备注</dt><dd>${esc(paper.note)}</dd>` : ''}
       </dl>
-      ${catalog !== demoPapers ? `<form id="pv-doi-form">
+      <form id="pv-doi-form">
         <label>填写或更新 DOI<input name="doi" value="${esc(paper.doi)}" placeholder="可留空" autocomplete="off" spellcheck="false"></label>
         <p class="muted small">更改保留在当前页，导出 CSV 可保存。</p>
         <p id="pv-doi-error" role="alert"></p>
         <div class="pv-actions"><button type="submit" class="primary">保存 DOI</button>
           <button type="button" data-pv-lookup-record>查询 DOI 元数据</button>
           <button type="button" data-pv-close>关闭</button></div>
-      </form>` : '<button type="button" data-pv-close>关闭</button>'}`;
+      </form>`;
     dialog.showModal();
   }
 
@@ -779,7 +765,7 @@ function mountPerovskiteCatalog(workspace, sourceBadge) {
       try { text = new TextDecoder('utf-8', {fatal:true}).decode(bytes); }
       catch { text = new TextDecoder('gb18030', {fatal:true}).decode(bytes); }
       const next = parseCatalog(text, file.name);
-      if (catalog !== demoPapers && !confirm('导入新文件会替换本页文献。继续导入？')) return;
+      if (catalog.length && !confirm('导入新文件会替换本页文献。继续导入？')) return;
       catalog = next;
       view = 'overview';
       clearFilters();
